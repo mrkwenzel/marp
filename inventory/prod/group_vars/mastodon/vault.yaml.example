@@ -1,0 +1,9 @@
+vault:
+  mastodon:
+    secret_key_base: ''
+    otp_secret: ''
+    vapid_private_key: ''
+    smtp_password: ''
+  hetzner:
+    monitoring_token: ''
+  

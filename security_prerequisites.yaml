@@ -1,0 +1,61 @@
+- hosts: "mastodon"
+  handlers:
+    - name: restart sshd
+      service:
+        name: sshd
+        state: restarted
+      
+    - name: restart fail2ban
+      service:
+        name: fail2ban
+        state: restarted
+
+    - name: load iptables rules
+      community.general.iptables_state:
+        state: restored
+        path: /etc/iptables/rules.v4
+
+  tasks:
+    # TODO: Add local user, add to sudo, disable ssh root login
+
+    # https://docs.joinmastodon.org/admin/prerequisites/
+    - name: "Configure sshd"
+      lineinfile:
+        path: "/etc/ssh/sshd_config"
+        regex: "^(#)?{{item.key}}"
+        line: "{{item.key}} {{item.value}}"
+        state: present
+      loop:
+        #- { key: "PermitRootLogin", value: "no" }
+        - { key: "PasswordAuthentication", value: "no" } 
+      notify:
+        - restart sshd
+
+    - name: "Update packages"
+      apt:
+        upgrade: yes
+        update_cache: yes
+
+    - name: "Install fail2ban"
+      apt:
+        name: fail2ban
+        state: present
+
+    - name: "Copy fail2ban config"
+      copy:
+        src: "jail.local"
+        dest: "/etc/fail2ban/jail.local"
+      notify:
+        - restart fail2ban
+
+    - name: "Install iptables-persistent"
+      apt:
+        name: "iptables-persistent"
+        state: present
+
+    - name: "Copy iptables-persistent config"
+      copy:
+        src: "rules.v4"
+        dest: "/etc/iptables/rules.v4"
+      notify:
+        - load iptables rules

@@ -1,0 +1,15 @@
+mastodon:
+  local_domain: ''
+  secret_key_base: '{{vault.mastodon.secret_key_base}}'
+  otp_secret: '{{vault.mastodon.otp_secret}}'
+  vapid_private_key: '{{vault.mastodon.vapid_private_key}}'
+  vapid_public_key: ''
+  smtp_server: ''
+  smtp_port: ''
+  smtp_login: ''
+  smtp_password: '{{vault.mastodon.smtp_password}}'
+  smtp_from_address: ''
+  admin_username: ''
+  admin_email: ''
+hetzner:
+  monitoring_token: '{{vault.hetzner.monitoring_token}}'

@@ -1,0 +1,312 @@
+- hosts: 'mastodon'
+  vars:
+    ansible_distribution_release: 'focal'
+  tasks:
+    # https://docs.joinmastodon.org/admin/install/
+    - name: 'System repositories'
+      apt:
+        state: 'present'
+        name:
+          - 'curl'
+          - 'wget'
+          - 'gnupg'
+          - 'apt-transport-https'
+          - 'lsb-release'
+          - 'ca-certificates'
+
+    - name: 'Install the gpg key for nodejs LTS'
+      apt_key:
+        url: 'https://deb.nodesource.com/gpgkey/nodesource.gpg.key'
+        state: 'present'
+
+    - name: 'Install the nodejs LTS repos'
+      vars:
+        NODEJS_VERSION: '16'
+      apt_repository:
+        repo: 'deb https://deb.nodesource.com/node_{{ NODEJS_VERSION }}.x {{ ansible_distribution_release }} main'
+        state: 'present'
+        update_cache: true
+
+    - name: 'Install the gpg key for PostgreSQL - Download'
+      ansible.builtin.get_url:
+        url: 'https://www.postgresql.org/media/keys/ACCC4CF8.asc'
+        dest: '/usr/share/keyrings/postgresql.asc'
+
+    - name: 'Install the PostgreSQL repos'
+      apt_repository:
+        repo: 'deb [signed-by=/usr/share/keyrings/postgresql.asc] http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main'
+        state: 'present'
+        update_cache: true
+
+    - name: 'System packages'
+      apt:
+        state: 'present'
+        update_cache: true
+        name:
+          - imagemagick
+          - ffmpeg
+          - libpq-dev
+          - libxml2-dev
+          - libxslt1-dev
+          - file
+          - git-core
+          - g++
+          - libprotobuf-dev
+          - protobuf-compiler
+          - pkg-config
+          - nodejs
+          - gcc
+          - autoconf
+          - bison
+          - build-essential
+          - libssl-dev
+          - libyaml-dev
+          - libreadline6-dev
+          - zlib1g-dev
+          - libncurses5-dev
+          - libffi-dev
+          - libgdbm-dev
+          - nginx
+          - redis-server
+          - redis-tools
+          - postgresql
+          - postgresql-contrib
+          - certbot
+          - python3-certbot-nginx
+          - libidn11-dev
+          - libicu-dev
+          - libjemalloc-dev
+          - python3-psycopg2
+
+    # Make idempotent
+    - name: 'Enable yarn'
+      command: 'corepack enable'
+
+    # Make idempotent
+    - name: 'Set yarn version'
+      command: 'yarn set version stable'
+
+    - name: 'Add user mastodon'
+      user:
+        name: 'mastodon'
+        shell: '/bin/bash'
+
+    - name: 'Install Ruby'
+      become: true
+      become_user: 'mastodon'
+      become_method: 'su'
+      block:
+        - name: 'Clone rbenv'
+          git:
+            repo: 'https://github.com/rbenv/rbenv.git'
+            dest: '~/.rbenv'
+        
+        # Make idempotent
+        - name: 'Build rbenv'
+          command: 'src/configure && make -C src'
+          args:
+            chdir: '~/.rbenv'
+        
+        - name: 'Add rbenv to path'
+          lineinfile:
+            path: '~/.bashrc'
+            line: 'export PATH="$HOME/.rbenv/bin:$PATH"'
+        
+        - name: 'Add rbenv init to path'
+          lineinfile:
+            path: '~/.bashrc'
+            line: 'eval "$(rbenv init -)"'
+        
+        - name: 'Clone ruby-build'
+          git:
+            repo: 'https://github.com/rbenv/ruby-build.git'
+            dest: '~/.rbenv/plugins/ruby-build'
+      
+        - name: 'Check versions'
+          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && ~/.rbenv/bin/rbenv versions'
+          register: rbenv_versions
+        
+        # Make robust???
+        - name: 'Install rbenv'
+          environment:
+            RUBY_CONFIGURE_OPTS: '--with-jemalloc'
+          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && ~/.rbenv/bin/rbenv install 3.0.3'
+          when: rbenv_versions.stdout != "  3.0.3" and rbenv_versions.stdout != "* 3.0.3 (set by /home/mastodon/.rbenv/version)"
+        
+        # Make idempotent
+        - name: 'Set rbenv global'
+          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && ~/.rbenv/bin/rbenv global 3.0.3'
+        
+        # Make idempotent
+        - name: 'Install bundler'
+          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && gem install bundler --no-document'
+
+    - name: 'Copy PostgreSQL conf'
+      copy:
+        src: 'postgresql.conf'
+        dest: '/etc/postgresql/15/main/postgresql.conf'
+      register: postgresql_conf
+    
+    - name: 'Restart PostgreSQL'
+      service:
+        name: 'postgresql'
+        state: 'restarted'
+      when: postgresql_conf.changed
+
+    - name: 'Create Mastodon PostgreSQL user'
+      become: true
+      become_user: 'postgres'
+      community.postgresql.postgresql_user:
+        name: 'mastodon'
+        role_attr_flags: 'CREATEDB'
+
+    - name: 'Finally install Mastodon'
+      become: true
+      become_user: 'mastodon'
+      become_method: 'su'
+      block:
+        - name: 'Git clone Mastodon repo'
+          git:
+            repo: 'https://github.com/tootsuite/mastodon.git'
+            dest: '~/live'
+
+        - name: 'Evaluate latest Mastodon version as of git tag'
+          shell: "cd ~/live && git tag -l | grep -v 'rc[0-9]*$' | sort -V | tail -n 1"
+          register: mastodon_latest_version
+
+        - name: 'Show latest version of Mastodon'
+          debug:
+            msg: '{{mastodon_latest_version.stdout}}'
+
+        - name: 'Checkout Mastodon {{mastodon_latest_version.stdout}}'
+          git:
+            repo: 'https://github.com/tootsuite/mastodon.git'
+            dest: '~/live'
+            version: '{{mastodon_latest_version.stdout}}'
+        
+        - name: 'bundle config deployment'
+          shell: "eval \"$(~/.rbenv/bin/rbenv init -)\" && bundle config deployment 'true'"
+
+        - name: 'bundle config without'
+          shell: "eval \"$(~/.rbenv/bin/rbenv init -)\" && bundle config without 'development test'"
+
+        - name: 'bundle install'
+          shell: "cd ~/live && eval \"$(~/.rbenv/bin/rbenv init -)\" && bundle install -j$(getconf _NPROCESSORS_ONLN)"
+
+        - name: 'yarn install'
+          shell: "cd ~/live && eval \"$(~/.rbenv/bin/rbenv init -)\" && yarn install --pure-lockfile"
+
+        - name: 'Copy env file'
+          template:
+            src: 'env.production.j2'
+            dest: '~/live/.env.production'
+        
+        - name: 'Create database migrations'
+          shell: "cd ~/live && eval \"$(~/.rbenv/bin/rbenv init -)\" && RAILS_ENV=production bundle exec rake db:setup"
+          ignore_errors: true
+
+        - name: 'Precompile assets'
+          shell: "cd ~/live && eval \"$(~/.rbenv/bin/rbenv init -)\" && RAILS_ENV=production bundle exec rake assets:precompile"
+        
+        - name: 'Create admin user'
+          shell: "cd ~/live && eval \"$(~/.rbenv/bin/rbenv init -)\" && RAILS_ENV=production bin/tootctl account create {{mastodon.admin_username}} --email={{mastodon.admin_email}} --role=admin --confirmed"
+          register: admin_account
+          ignore_errors: true
+
+        - name: 'Show admin pw'
+          debug:
+            msg: '{{admin_account.stdout}}'
+          ignore_errors: true
+
+    - name: 'Copy nginx config'
+      copy:
+        src: '/home/mastodon/live/dist/nginx.conf'
+        dest: '/etc/nginx/sites-available/mastodon'
+        remote_src: true
+
+    - name: 'Replace example.com with {{mastodon.local_domain}}'
+      replace:
+        path: '/etc/nginx/sites-available/mastodon'
+        regexp: 'example.com'
+        replace: '{{mastodon.local_domain}}'
+
+    - name: 'Uncomment ssl_cert directives'
+      replace:
+        path: '/etc/nginx/sites-available/mastodon'
+        regexp: '# ssl_certificate'
+        replace: 'ssl_certificate'
+
+    - name: 'Link nginx config'
+      file:
+        src: '/etc/nginx/sites-available/mastodon'
+        dest: '/etc/nginx/sites-enabled/mastodon'
+        state: link
+    
+    - name: 'Stop nginx for cert'
+      service:
+        name: 'nginx'
+        state: 'stopped'
+
+    - name: 'Activate certbot'
+      command: 'certbot certonly --standalone -d {{mastodon.local_domain}} -m {{mastodon.admin_email}} --agree-tos -n'
+
+    - name: 'Setup cronjob for cert renewal'
+      cron:
+        name: 'certbot renewal'
+        minute: '43'
+        hour: '1'
+        job: 'certbot renew --post-hook "systemctl reload nginx"'
+  
+    - name: 'Start nginx'
+      service:
+        name: 'nginx'
+        state: 'restarted'
+  
+    - name: 'Copy service unit files'
+      copy:
+        src: '/home/mastodon/live/dist/{{item}}.service'
+        dest: '/etc/systemd/system/'
+        remote_src: true
+      with_items:
+        - 'mastodon-web'
+        - 'mastodon-sidekiq'
+        - 'mastodon-streaming'
+
+    - name: 'Force systemd to reread service unit files'
+      systemd:
+        daemon_reload: true
+
+    - name: 'Enable mastodon-web service'
+      service:
+        name: 'mastodon-web'
+        enabled: true
+        state: 'restarted'
+
+    - name: 'Enable mastodon-sidekiq service'
+      service:
+        name: 'mastodon-sidekiq'
+        enabled: true
+        state: 'restarted'
+
+    - name: 'Enable mastodon-streaming service'
+      service:
+        name: 'mastodon-streaming'
+        enabled: true
+        state: 'restarted'
+
+    - name: 'Setup cleanup jobs'
+      become: true
+      become_user: 'mastodon'
+      become_method: 'su'
+      block:
+        - name: 'Setup media cleanup job'
+          cron:
+            name: 'media cleanup'
+            special_time: 'weekly'
+            job: 'RAILS_ENV=production /home/mastodon/live/bin/tootctl media remove'
+
+        - name: 'Setup preview_cards cleanup job'
+          cron:
+            name: 'preview_cards cleanup'
+            special_time: 'weekly'
+            job: 'RAILS_ENV=production /home/mastodon/live/bin/tootctl preview_cards remove'

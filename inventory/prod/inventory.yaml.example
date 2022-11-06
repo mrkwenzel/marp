@@ -1,0 +1,5 @@
+all:
+  children:
+    mastodon:
+      hosts:
+        <YOUR_HOSTNAME_HERE>:
