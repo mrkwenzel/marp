@@ -1,5 +1,5 @@
-  - name: "Security prerequisites"
-    import_playbook: "security_prerequisites.yaml"
+- name: "Security prerequisites"
+  import_playbook: "security_prerequisites.yaml"
 
-  - name: "Mastodon installation"
-    import_playbook: "mastodon_installation.yaml"
+- name: "Mastodon installation"
+  import_playbook: "mastodon_installation.yaml"

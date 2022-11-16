@@ -6,4 +6,6 @@ vault:
     smtp_password: ''
   hetzner:
     monitoring_token: ''
+    storagebox:
+      password: ''
   

@@ -13,3 +13,7 @@ mastodon:
   admin_email: ''
 hetzner:
   monitoring_token: '{{vault.hetzner.monitoring_token}}'
+  storagebox:
+    username: ''
+    password: '{{ vault.hetzner.storagebox.password }}'
+    mount: '/mnt/media_bucket'

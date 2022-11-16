@@ -1,0 +1,30 @@
+- hosts: 'mastodon'
+  tasks:
+    - name: 'Install prerequisites'
+      apt:
+        name: 
+          - 'cifs-utils'
+          - 'nginx'
+        state: 'present'
+        update_cache: true
+    
+    - name: 'Create {{ hetzner.storagebox.mount }} folder'
+      file:
+        state: 'directory'
+        path: '{{ hetzner.storagebox.mount }}'
+
+    - name: 'Mount Storagebox as cifs'
+      mount:
+        state: 'mounted'
+        path: '{{ hetzner.storagebox.mount }}'
+        src: '//{{ hetzner.storagebox.username }}.your-storagebox.de/backup'
+        fstype: 'cifs'
+        opts: 'defaults,auto,uid=1000,gid=1000,user={{ hetzner.storagebox.username }},password={{ hetzner.storagebox.password }}'
+
+    - name: 'Create symlink'
+      file:
+        state: 'link'
+        src: '{{ hetzner.storagebox.mount }}'
+        path: '/home/mastodon/live/public/system/cache/media_attachements'
+        owner: 'mastodon'
+        group: 'mastodon'

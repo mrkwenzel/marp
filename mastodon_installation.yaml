@@ -86,10 +86,18 @@
     - name: 'Set yarn version'
       command: 'yarn set version stable'
 
+    - name: 'Ensure group "mastodon" exists with correct gid'
+      group:
+        name: 'mastodon'
+        state: 'present'
+        gid: '1000'
+
     - name: 'Add user mastodon'
       user:
         name: 'mastodon'
         shell: '/bin/bash'
+        uid: '1000'
+        group: 'mastodon'
 
     - name: 'Install Ruby'
       become: true
@@ -248,7 +256,7 @@
         state: 'stopped'
 
     - name: 'Activate certbot'
-      command: 'certbot certonly --standalone -d {{mastodon.local_domain}} -m {{mastodon.admin_email}} --agree-tos -n'
+      command: 'certbot certonly --standalone -d {{mastodon.local_domain}} -m {{admin_email}} --agree-tos -n'
 
     - name: 'Setup cronjob for cert renewal'
       cron:
@@ -276,6 +284,10 @@
       systemd:
         daemon_reload: true
 
+    - name: 'Installing StorageBox'
+      import_playbook: 'install_storagebox.yaml'
+      tags: 'storagebox'
+
     - name: 'Enable mastodon-web service'
       service:
         name: 'mastodon-web'
@@ -298,15 +310,18 @@
       become: true
       become_user: 'mastodon'
       become_method: 'su'
+      tags: 'crontab'
       block:
         - name: 'Setup media cleanup job'
           cron:
             name: 'media cleanup'
-            special_time: 'weekly'
-            job: 'RAILS_ENV=production /home/mastodon/live/bin/tootctl media remove'
+            special_time: 'daily'
+            job: 'RAILS_ENV=production /home/mastodon/live/bin/tootctl media remove --days=1'
+          tags: 'crontab'
 
         - name: 'Setup preview_cards cleanup job'
           cron:
             name: 'preview_cards cleanup'
             special_time: 'weekly'
             job: 'RAILS_ENV=production /home/mastodon/live/bin/tootctl preview_cards remove'
+          tags: 'crontab'
