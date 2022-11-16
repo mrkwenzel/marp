@@ -138,12 +138,12 @@
         - name: 'Install rbenv'
           environment:
             RUBY_CONFIGURE_OPTS: '--with-jemalloc'
-          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && ~/.rbenv/bin/rbenv install 3.0.3'
-          when: rbenv_versions.stdout != "  3.0.3" and rbenv_versions.stdout != "* 3.0.3 (set by /home/mastodon/.rbenv/version)"
+          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && ~/.rbenv/bin/rbenv install 3.0.4'
+          when: rbenv_versions.stdout != "  3.0.4" and rbenv_versions.stdout != "* 3.0.4 (set by /home/mastodon/.rbenv/version)"
         
         # Make idempotent
         - name: 'Set rbenv global'
-          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && ~/.rbenv/bin/rbenv global 3.0.3'
+          shell: 'eval "$(~/.rbenv/bin/rbenv init -)" && ~/.rbenv/bin/rbenv global 3.0.4'
         
         # Make idempotent
         - name: 'Install bundler'
