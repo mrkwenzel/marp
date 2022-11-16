@@ -315,8 +315,8 @@
         - name: 'Setup media cleanup job'
           cron:
             name: 'media cleanup'
-            special_time: 'daily'
-            job: 'RAILS_ENV=production /home/mastodon/live/bin/tootctl media remove --days=1'
+            special_time: 'weekly'
+            job: 'RAILS_ENV=production /home/mastodon/live/bin/tootctl media remove'
           tags: 'crontab'
 
         - name: 'Setup preview_cards cleanup job'
